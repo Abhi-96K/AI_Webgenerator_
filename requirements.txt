@@ -1,0 +1,13 @@
+Django>=4.2
+djangorestframework
+openai
+stripe
+python-dotenv
+celery[redis]
+redis
+whitenoise
+Pillow
+gunicorn
+qrcode[pil]
+dj-database-url
+psycopg2-binary
