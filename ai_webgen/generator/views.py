@@ -162,6 +162,7 @@ def dashboard(request):
         'days_since_joined': days_since_joined,
         'remaining_websites': profile.get_remaining_websites(),
         'can_generate': profile.can_generate_website(),
+        'now': timezone.now(),
     }
     
     return render(request, 'generator/dashboard.html', context)
@@ -177,22 +178,43 @@ def download_site(request, site_id):
         if site.user and site.user != request.user and not request.user.is_staff:
             raise Http404("Site not found")
         
-        # Increment download count
-        site.downloads_count += 1
-        site.save()
+        # Check if file exists and is accessible
+        if not site.generated_file:
+            messages.error(request, "File not found or has been deleted.")
+            raise Http404("File not found")
         
-        if site.generated_file:
+        try:
+            # Check if file exists on filesystem
+            if not site.generated_file.storage.exists(site.generated_file.name):
+                messages.error(request, "File not found on server.")
+                raise Http404("File not found")
+            
+            # Increment download count
+            site.downloads_count += 1
+            site.save()
+            
+            # Create response with proper error handling
+            file_content = site.generated_file.read()
+            if not file_content:
+                messages.error(request, "File is empty or corrupted.")
+                raise Http404("File corrupted")
+            
             response = HttpResponse(
-                site.generated_file.read(),
+                file_content,
                 content_type='application/zip'
             )
             response['Content-Disposition'] = f'attachment; filename="website_{site.id}.zip"'
             return response
-        else:
-            raise Http404("File not found")
             
-    except Exception as e:
+        except (IOError, OSError) as e:
+            messages.error(request, "Error accessing file. Please try again later.")
+            raise Http404("File access error")
+            
+    except GeneratedSite.DoesNotExist:
         raise Http404("Site not found")
+    except Exception as e:
+        messages.error(request, "An unexpected error occurred. Please contact support.")
+        raise Http404("Download error")
 
 
 @login_required

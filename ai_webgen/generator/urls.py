@@ -9,12 +9,12 @@ urlpatterns = [
     path('generate/', views.generate_page, name='generate'),
     path('dashboard/', views.dashboard, name='dashboard'),
     
-    # API endpoints  
-    path('generator/generate/', views.generate_api, name='generate_api'),
+    # API endpoints
+    path('api/generate/', views.generate_api, name='generate_api'),
     path('download/<int:site_id>/', views.download_site, name='download_site'),
     path('delete/<int:site_id>/', views.delete_site, name='delete_site'),
     
-    # New pages
+    # New page
     path('help/', views.help_center, name='help_center'),
     path('contact/', views.contact_us, name='contact_us'),
     path('suggestions/', views.suggestion_box, name='suggestion'),

@@ -14,6 +14,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from datetime import timedelta
+from django.db import transaction
 import json
 
 from generator.models import UserProfile
@@ -126,6 +127,7 @@ def register_view(request):
             
             # Store user ID in session for OTP verification
             request.session['otp_user_id'] = user.id
+            request.session['otp_session_start'] = timezone.now().timestamp()
             return redirect('auth:verify_otp')
             
         except Exception as e:
@@ -265,6 +267,18 @@ def verify_otp(request):
         messages.error(request, 'Session expired. Please register again.')
         return redirect('auth:register')
     
+    # Check if session is not too old (30 minutes max)
+    session_start = request.session.get('otp_session_start')
+    if session_start:
+        from datetime import datetime
+        if timezone.now().timestamp() - session_start > 1800:  # 30 minutes
+            if 'otp_user_id' in request.session:
+                del request.session['otp_user_id']
+            if 'otp_session_start' in request.session:
+                del request.session['otp_session_start']
+            messages.error(request, 'Session expired. Please register again.')
+            return redirect('auth:register')
+    
     try:
         user = User.objects.get(id=user_id)
         profile = user.userprofile
@@ -283,19 +297,20 @@ def verify_otp(request):
             messages.error(request, 'Please enter a valid 6-digit code.')
             return render(request, 'auth/verify_otp.html', {'user': user})
         
-        # Verify OTP
-        success, message = profile.verify_email_otp(otp)
-        
-        if success:
-            # Clear session
-            if 'otp_user_id' in request.session:
-                del request.session['otp_user_id']
+        # Verify OTP with transaction safety
+        with transaction.atomic():
+            success, message = profile.verify_email_otp(otp)
             
-            messages.success(request, message + ' You can now log in and start creating websites!')
-            return redirect('auth:login')
-        else:
-            messages.error(request, message)
-            return render(request, 'auth/verify_otp.html', {'user': user})
+            if success:
+                # Clear session
+                if 'otp_user_id' in request.session:
+                    del request.session['otp_user_id']
+                
+                messages.success(request, message + ' You can now log in and start creating websites!')
+                return redirect('auth:login')
+            else:
+                messages.error(request, message)
+                return render(request, 'auth/verify_otp.html', {'user': user})
     
     return render(request, 'auth/verify_otp.html', {'user': user})
 
